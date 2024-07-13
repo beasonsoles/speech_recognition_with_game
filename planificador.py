@@ -2,15 +2,10 @@ import inrrobot
 import voice_recognition
 import random
 import time
-import os
-import sys
 import robot_sockets
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from threading import Thread, currentThread
-
-#TODO: CAMBIAR 0.05 Y -0.05 EN ANALYSIS DE SENTIMIENTO
-#TODO: añadir la conexión con el robot (interfaz)
-#TODO: cuando escuches el sonido (se puede reproducir el sonido??)
+from deep_translator import GoogleTranslator
 
 
 class ColorGameStateMachine: 
@@ -44,7 +39,7 @@ class ColorGameStateMachine:
         """
         Se cambia el estado actual de la máquina de estados a uno nuevo y se ejecuta la función asociada al nuevo estado
         """
-        #while inrrobot.isExecuting():
+        #while inrrobot.isSpeaking():
         while inrrobot.isExecuting():
             time.sleep(0.2)
         
@@ -73,13 +68,14 @@ class ColorGameStateMachine:
         # esperar a que el audio haya terminado de enviarse
         while not robot_sockets.audio_received:
             time.sleep(0.2)
-        guess = voice_recognition.speech_to_text(file)
-        print("Respuesta: ", guess)
+        text = voice_recognition.speech_to_text(file)
+        print("Respuesta: ", text)
+        response = GoogleTranslator(source='spanish', target='english').translate(text)
         robot_sockets.audio_received = False
 
-        if guess:
+        if response:
             # analizar el sentimiento de la respuesta
-            sentiment = self.analizarSentimientos(guess)
+            sentiment = self.analizarSentimientos(response)
             if sentiment == "positivo":
                 inrrobot.say("¡Me alegro!")
             elif sentiment == "negativo":
