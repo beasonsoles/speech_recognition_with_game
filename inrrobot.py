@@ -134,6 +134,93 @@ def send_order(function_name, parameters=[], reply_required=False, ignore_errors
     else:
         return out, bin_mode
 
+def send_order_local(function_name, parameters=[], reply_required=False, ignore_errors=False, max_retries=MAX_RETRIES, binary_mode=0):
+    #print("send_order START")
+    #print(function_name, parameters)
+    
+    if function_name != None and (function_name not in globals() or type(send_order) != type(globals()[function_name])): # If it not exists or it is not a function
+        printerr("Unknown robot action " + function_name, "inrrobot.send_order", warning=True)
+        return
+    
+    params = parameters
+    if parameters is None:
+        params = []
+        
+    #s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #s.settimeout(TIMEOUT)
+        
+    connection_ok = False
+    retry = 0
+    s = None
+    
+    while(not connection_ok and retry < max_retries):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(TIMEOUT)
+        timer = time.time()
+        exception = None
+        try:
+            host = sync_get_host()
+            if host:
+                s.connect(("127.0.0.1", 9558))
+                connection_ok = True
+        except Exception as e:
+            exception = e
+            
+        if not connection_ok:
+            retry = retry + 1
+            
+            if not ignore_errors and retry < max_retries:
+                printerr(function_name + " Persee->Robot. Retry " + str(retry) + " of " + str(max_retries) + "...", "inrrobot.send_order")
+                if not exception or not isinstance(exception, socket.timeout):
+                    sleep_min(timer, TIMEOUT)
+            elif not ignore_errors:
+                printerr(function_name + " Persee->Robot. Ignoring.", "inrrobot.send_order", exception)
+
+            else:
+                retry = max_retries
+
+            try:
+                s.shutdown(socket.SHUT_RDWR) # Finished sending and receiving. Free resources.
+                s.close()
+            except Exception as e:
+                if not ignore_errors:
+                    printerr(function_name + " Failure shutting down Persee->Robot (" + str(e) + ")", "inrrobot.send_order")
+
+    out = None
+    bin_mode = 0
+    if connection_ok:
+        mutexSocket.acquire()
+        if binary_mode == 0:
+            send_msg(s, get_command(function_name, params))
+        else:
+            send_msg(s, params[0], binary_mode=binary_mode)
+        mutexSocket.release()
+
+        if reply_required:
+            #print("Waiting for response...")
+            #s.shutdown(socket.SHUT_WR) # Finished sending. Still receiving.
+                        
+            data_received = False
+            while(not data_received):
+                timer = time.time()
+                try:
+                    out, bin_mode = recv_msg(s)
+                    data_received = True
+                except Exception as e:
+                    time.sleep(0.2)
+        try:
+            s.shutdown(socket.SHUT_RDWR) # Finished sending and receiving. Free resources.            
+            s.close()
+        except Exception as e:
+            if not ignore_errors:
+                printerr(function_name + " Failure shutting down Robot->Persee (" + str(e) + ")", "inrrobot.send_order")
+            
+    #print("send_order END")
+    if bin_mode == 0:
+        return out
+    else:
+        return out, bin_mode
+    
 def get_robot_host():    
     out = None
     mode = get_robot_detection_mode()
@@ -190,17 +277,16 @@ def connect(host_forced=None):
     mode = get_robot_detection_mode()
     
     if mode == 1:
-        print("  Robot IP (auto) ", end='')
+        print("  Robot IP (auto) ")
     elif mode == 2:
-        print("  Robot IP (static) " + os.environ['ROBOT_IP'].lower().strip() + ":" + os.environ['ROBOT_SOCKET_PORT'].lower().strip() + " ", end='')
+        print("  Robot IP (static) " + os.environ['ROBOT_IP'].lower().strip() + ":" + os.environ['ROBOT_SOCKET_PORT'].lower().strip() + " ")
     elif mode == 3:
-        print("  Robot IP (none) ", end='')
+        print("  Robot IP (none) ")
 
     timeout = False
     if not host_forced:
         while not sync_get_host() and mode != 3:
             timer = time.time()
-            print(".", end='', flush=True)
             sync_set_host(get_robot_host())
             sleep_min(timer, TIMEOUT)
     else:
@@ -211,7 +297,6 @@ def connect(host_forced=None):
                 timeout = True
             else:
                 timer = time.time()
-                print(".", end='', flush=True)
                 sleep_min(timer, TIMEOUT)
                 
         if not timeout:
@@ -318,11 +403,14 @@ def is_ice_order():
 #     ROBOT STATE FUNCTIONS     #
 #################################
 
+def startProcessing():
+    return send_order_local("startProcessing", [], reply_required=True)
+
 def startRobotSubscriptorConnection(MS_IP, retries=MAX_RETRIES):
     return send_order("startRobotSubscriptorConnection", [MS_IP], max_retries=retries)
 
-def maintainRobotSubscriptorConnection(retries=MAX_RETRIES):
-    send_order("maintainRobotSubscriptorConnection", [], max_retries=retries)
+def maintainRobotSubscriptorConnection(MS_IP, retries=MAX_RETRIES):
+    send_order("maintainRobotSubscriptorConnection", [MS_IP], max_retries=retries)
     
 def getInrobicsVersion():
     return send_order("getInrobicsVersion", [])
