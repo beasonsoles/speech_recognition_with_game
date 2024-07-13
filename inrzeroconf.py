@@ -124,7 +124,7 @@ def get_host_async(service, port=None):
 def set_host(host):
     hosts[host["service"]] = host
         
-
+"""
 def set_ice_communicator(communicator):
     global ice_communicator
     if ice_communicator and ice_communicator != communicator:
@@ -141,5 +141,5 @@ def destroy_ice():
 
 
 atexit.register(destroy_ice)
-
+"""
 
